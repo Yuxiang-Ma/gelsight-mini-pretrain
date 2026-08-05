@@ -19,10 +19,18 @@ PIXEL_THRESH = 10
 
 
 def grey_center(arr: np.ndarray) -> np.ndarray:
-    """Central 50% crop, greyscale, float32."""
-    g = arr.mean(axis=2) if arr.ndim == 3 else arr
-    h, w = g.shape
-    return g[h // 4:3 * h // 4, w // 4:3 * w // 4].astype(np.float32)
+    """Central 50% crop, greyscale, float32.
+
+    Crops to central 50% region first, then averages channels (if RGB). This
+    is 4x cheaper than the legacy mean-then-crop form: the channel mean is
+    computed independently per-pixel, so cropping before averaging is
+    mathematically identical. Bit-identical to legacy output; pinned by
+    test_grey_center_matches_legacy.
+    """
+    h, w = arr.shape[:2]
+    crop = arr[h // 4:3 * h // 4, w // 4:3 * w // 4]
+    g = crop.mean(axis=2) if crop.ndim == 3 else crop
+    return g.astype(np.float32)
 
 
 def contact_metrics(
