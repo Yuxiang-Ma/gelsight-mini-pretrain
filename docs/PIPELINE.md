@@ -1,10 +1,26 @@
-# Pipeline Reference (v4)
+# Pipeline Reference
 
 The canonical reference for **how every frame in `yxma/gelsight-mini-pretrain`
-got there**. Source code: [`scripts/make_parquet_v2.py`](scripts/make_parquet_v2.py).
+got there**. The code that produced the published release is
+[`legacy/make_parquet_v2.py`](../legacy/make_parquet_v2.py) plus the
+standalone ingest/repair scripts alongside it; it is being migrated
+task-by-task into [`src/gsmp/`](../src/gsmp/) (see "Where the code lives"
+and "Migration status" below).
 
-This file is the single source of truth — if the pipeline code disagrees
-with this doc, the doc wins and the code should be updated to match.
+The code is the source of truth. This document describes what
+`src/gsmp/` (and, for not-yet-migrated sources, `legacy/`) actually does;
+where they disagree, the code is right and this document is stale — fix
+the document.
+
+Per-source parameters are NOT duplicated here. They live in the
+`SourceSpec` at the top of each `src/gsmp/sources/<name>.py`. The previous
+version of this file listed thresholds inline, which is how i_min came to
+have four different documented values.
+
+This doc previously labelled itself "v4", a version number that stopped
+being updated years before `archive/finalize_v9.sh` shipped. It no longer
+carries a version number for that reason — check `git log` for this file
+and `archive/README.md` for what actually happened between releases.
 
 ---
 
@@ -87,7 +103,7 @@ ELSE       keep with probability BG_KEEP_RATE       (background-diversity)
 |---|---|---|
 | `PIXEL_THRESH` | **10** grey-levels | floor for what counts as a "lit" pixel; drops sensor noise |
 | `A_MIN` | **40** pixels | smallest imprint we'll accept (~0.2% of the central crop) |
-| `I_MIN` | **15** grey-levels (10 for FoTA) | average per-lit-pixel deformation that constitutes a real imprint |
+| `I_MIN` | per-source, see each `SourceSpec` | authoritative values are read from the legacy code, file:line cited, in `docs/imin_from_code.md`; `tools/recover_imin.py` / `docs/imin_recovered.md` is an independent empirical cross-check from the published data, not the primary source. Historically this doc alone documented three different global values (10, 12, 15) that matched none of the 13 sources exactly |
 | `BG_KEEP_RATE` | **0.015** (1.5%) | of frames that FAIL the filter, kept anyway for VAE-diversity |
 
 Every kept row also carries:
@@ -98,27 +114,41 @@ Every kept row also carries:
 
 ## Baseline per source
 
-The baseline is **the median of frames from the same capture/round/episode
-where the gel is most likely to be at rest**. Source-specific recipe:
+> This table is a human-readable summary, kept intentionally free of the
+> numeric thresholds that belong in each `SourceSpec` (see the I_MIN row
+> above). It has been wrong before — two rows below were corrected while
+> writing this doc (see the notes under the table) — so treat it as a
+> map, not the ground truth. For a migrated (tier-1) source, the
+> authoritative description is the `BaselineStrategy` passed to its
+> `SourceSpec` in `src/gsmp/sources/<name>.py`; for everything still in
+> `legacy/`, it's the iterator that actually produced the published shard
+> (see `docs/imin_from_code.md` for which script that is, per source —
+> more than one source has a dead second implementation that looks live
+> at a glance).
+
+Most sources build the baseline as **the median of frames from the same
+capture/round/episode where the gel is most likely to be at rest**.
+Source-specific recipe:
 
 | Source | Capture unit | Baseline method |
 |---|---|---|
 | `fota_labeled` | one (object × pose × side) capture | cross-frame median of a random 30-frame sample |
 | `fota_unlabeled` | same | same |
-| `threedcal` | global | cross-image median over a random 200-frame sample |
-| `feats` | per-indenter-shape | cross-capture median within same `indenter`+`indenter_param` group |
+| `threedcal` | global | **not a median** — the single `blank_images/blank.png` shipped with the upstream release, read once (`legacy/make_parquet_v2.py:529-547`) |
+| `feats` | per-indenter-shape | cross-capture median within same `indenter`+`indenter_param` group (as read by `legacy/make_parquet_v2.py`'s `iter_feats`; the published data was actually produced by `legacy/convert_feats.py` (raw npy -> parquet, no filter) followed by the force-gated `archive/reprocess_feats.py` (re-extract + filter), which has no pixel baseline at all — see the FEATS caveat below) |
 | `gelslam` | one tracking/recon episode | median of first 10 frames of the .avi |
 | `tactile_tracking` | one trial | same |
 | `real_tactile_mnist` | one parquet row (256 touch videos) | per-touch median of first 5 frames; falls back to cross-touch |
 | `feelanyforce` | global | cross-object median (3 imgs x 42 objs) |
 | `sim_tactile_mnist` | one digit object row (32 touches) | median across the 32 rendered touches |
 | `sim_starstruck` | same | same |
-| `tacquad_mini` | per data_* split | cross-touch median (60-frame random sample) |
-| `unit` | per zarr episode | first-5-frame median |
+| `tacquad` | per domain (`data_indoor` / `data_outdoor` / `data_fine`) | cross-object median (100-frame random sample), `legacy/ingest_tacquad_full.py`. Not `tacquad_mini`: that's a second, dead `iter_tacquad_mini()` in `make_parquet_v2.py` that never produced published output — see `docs/imin_from_code.md`'s "tacquad conflict" |
+| `unit` | global (one zarr array, not per-episode) | median of 120 frames sampled uniformly at random from the whole 11,340-frame array (`random.Random(20260520)`), not a first-N-frames median — see `src/gsmp/sources/unit.py`'s docstring for why this matters for reproducing the published set exactly |
 
 **Caveat — markered sources (FEATS).** Tracking dots make pixel diffing
-unreliable. FEATS uses force-based filter `|f_z| >= 0.4 N` + 1.5% bg-keep
-instead.
+unreliable. The script that actually produced the published `feats` data
+uses a force-based filter `|f_z| >= 0.4 N` + 1.5% bg-keep instead, with no
+pixel baseline at all (`archive/reprocess_feats.py:18,113`).
 
 ---
 
@@ -197,7 +227,20 @@ rows x ~50 KB JPEGs. Mitigation:
 
 ---
 
-## Unified schema (current, single-view, 30 columns)
+## Unified schema (single-view, 30 columns)
+
+> **Not actually unified.** `fota_labeled` and `fota_unlabeled` were
+> published with 26 columns, missing `episode`, `frame_idx`, `digit_class`
+> and `gel_variant` (93,155 frames, ~11% of the corpus). The released
+> README's `concatenate_datasets` example fails because of this.
+> `gsmp.schema.LEGACY_26_SOURCES` records it and
+> `tests/test_schema.py::test_fota_is_known_to_deviate` pins it.
+> Remediation requires republishing those two subsets — see Task 19.
+
+Authoritative definition: `gsmp.schema.SCHEMA` in
+[`src/gsmp/schema.py`](../src/gsmp/schema.py). `gsmp.schema.published_columns()`
+reads a source's actual shard schema for comparison; use it, don't trust
+this table blindly.
 
 | Column | Type | Description |
 |---|---|---|
@@ -219,7 +262,13 @@ rows x ~50 KB JPEGs. Mitigation:
 | `episode` | string | episode id |
 | `frame_idx` | int32 | frame index within source video |
 | `digit_class` | int32 | RTM / sim digit 0-9 |
-| `sequence_id`, `frame_in_seq`, `sequence_length`, `fps` | str/int/int/float | **video subset only** |
+
+That's the full 30. The sequence-preserving video subset
+(`mini_data_parquet_video/`, built by `legacy/make_parquet_video.py`) is a
+**separate schema**, not a superset of this one: it adds `sequence_id`,
+`frame_in_seq`, `sequence_length`, `fps` and is not modeled by
+`gsmp.schema.SCHEMA` at all. See "Not migrated" in the top-level
+`README.md`.
 
 ---
 
@@ -273,20 +322,64 @@ Total growth: **~52K rows = ~5% of current 1.1M**.
 
 ## Where the code lives
 
-```
-scripts/
-  make_parquet_v2.py        # main pipeline
-  redo_fota_unlabeled.py    # v4 fast cv2 reprocess (raw JPEG -> parquet)
-  reprocess_fota.py         # v3 in-place post-filter
-  dedupe_cap_fota.py        # phash dedupe + budget cap, streaming
-  parallel_rtm.py           # multiprocessing RTM
-  parallel_sim.py           # multiprocessing sim_*
-  make_parquet_video.py     # video subset (sequence-preserving)
-  make_samples_100.py       # sample grids for assets/
-  make_analytical_plots.py
-  make_pie_charts.py
-  probe_*.py
-```
+All of it lives in one git repository (`gelsight-mini-pretrain`), mirrored
+to GitHub:
+
+| Directory | What's there |
+|---|---|
+| `src/gsmp/` | The package under active migration: `runner.py` (generic frame-decision engine), `sources/<name>.py` (one `SourceSpec` + iterator per source), `spec.py`, `schema.py`, `baseline.py`, `filters.py`, `encode.py`, `writer.py`, `config.py`, `regress.py`, `tools_imin.py`. |
+| `legacy/` | The original scripts that produced the published release, imported verbatim on 2026-08-04. Sources move out of here into `src/gsmp/sources/` task by task; nothing is deleted from `legacy/` until its replacement has a passing regression run (`tools/regress.py`). |
+| `archive/` | 19 one-off repair scripts that ran once against already-published data (channel-order fixes, label repairs, budget/dedupe passes, release drivers) and are kept for provenance only — see `archive/README.md`. |
+| `tools/` | `audit_sources.py` (tier-1/tier-2 assignment), `recover_imin.py` (empirical i_min cross-check), `regress.py` (compares a migrated source's kept-key set against the published release). |
+| `docs/` | This file, plus `source_tiers.md`, `imin_from_code.md`, `imin_recovered.md`. |
+| `tests/` | The pytest suite (see the reproducibility checklist below). |
+
+**Target end state for the Hugging Face side (Task 20, not yet executed).**
+The dataset repo on Hugging Face currently still carries a `scripts/`
+copy: an 8-file snapshot from 2026-05-17 whose `make_parquet_v2.py` is
+7,770 bytes behind the code that actually produced the release. A copy
+with no mechanism keeping it fresh is worse than a link, so once Task 20
+runs, that copy is removed and the dataset README points at this
+repository instead. Until then, treat the HF-side `scripts/` copy as
+stale — it is not what produced the data you're looking at.
+
+---
+
+## Migration status
+
+Full detail and the tiering rationale: `docs/source_tiers.md`. Summary,
+current as of this doc:
+
+- **10 tier-1 sources** — published rows carry a usable
+  `(capture, frame_idx)` join key, so a migration can be checked against
+  the release with `tools/regress.py`: `gelslam`, `tactile_tracking`,
+  `real_tactile_mnist`, `feelanyforce`, `threedcal`, `tacquad`, `unit`,
+  `sim_tactile_mnist`, `sim_starstruck`, `sparsh`.
+- **3 tier-2 sources** — no join key, so nothing can be proven against the
+  release; these are wrapped, not rewritten: `feats`, `fota_labeled`,
+  `fota_unlabeled`.
+
+Within tier-1, be precise about what's actually been done — "tier-1" is
+eligibility for a regression proof, not evidence that one has been run:
+
+- **Migrated and regression-proven**: `tactile_tracking`
+  (`python tools/regress.py --source tactile_tracking` →
+  `PASS exact: 2408 keys identical`) and `unit`
+  (`python tools/regress.py --source unit` →
+  `PASS exact: 387 keys identical`). Their code lives in
+  `src/gsmp/sources/tactile_tracking.py` and `src/gsmp/sources/unit.py`.
+- **In progress**: `gelslam` — a migration exists but is mid-fix and its
+  regression run has not completed; do not treat it as proven. Its
+  `legacy/` implementation is still what's authoritative for the
+  published data.
+- **Not yet migrated** (still `legacy/` only): `real_tactile_mnist`,
+  `feelanyforce`, `threedcal`, `tacquad`, `sim_tactile_mnist`,
+  `sim_starstruck`, `sparsh`.
+
+Tier-2 sources cannot get a regression proof by construction (no join
+key), so "wrapped" (a `SourceSpec` added, filtering logic untouched — see
+`src/gsmp/sources/feats.py`, `fota_labeled.py`, `fota_unlabeled.py`) is
+the ceiling for them, not a step on the way to "migrated."
 
 ---
 
