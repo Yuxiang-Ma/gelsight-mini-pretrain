@@ -1,6 +1,30 @@
-# Recovered i_min per source
+# Recovered i_min per source — empirical cross-check, NOT the primary source
 
-Produced by `python tools/recover_imin.py --all --sample 2000`, run against the
+**The authoritative per-source i_min values live in `docs/imin_from_code.md`.**
+Every legacy ingest path hardcodes its own explicit `I_MIN` in the code that
+actually produced the published files; that table was derived by reading
+those scripts directly, with file:line citations. This document is a
+*cross-check* of that table, built the other way round: empirically
+estimating i_min purely from the published (already-filtered) data, with no
+access to the original code's actual baseline.
+
+**Known limitation of this method:** it cannot work for any source whose
+published frames are contact-only relative to the grouping key this tool has
+available (`capture`). The estimator needs a genuine no-contact reference to
+diff against; when it instead builds that reference from the median of
+already-kept (already contact-positive) frames — because a capture group is
+tiny (down to a single row) or because most rows in a group are legitimately
+in contact — the reconstructed "baseline" partially or fully resembles a
+contact frame itself, and the recovered intensity is an artifact, not a
+threshold. See "Degenerate rows" below for exactly which sources hit this,
+and `docs/imin_from_code.md`'s `unit` investigation for a case where the
+artifact was non-degenerate (a plausible-looking wrong number, not an
+obvious zero) and required a deeper check.
+
+Where this method's precondition holds (capture groups large enough, and
+predominantly non-contact), it corroborates the code-derived values closely
+— see "Corroboration" below. Produced by
+`python tools/recover_imin.py --all --sample 2000`, run against the
 read-only published parquet trees
 (`/media/yxma/Disk1/yuxiang/mini_data_parquet{,_nc}`). No shard was written,
 moved, or modified.
@@ -61,10 +85,34 @@ recovered threshold:
   from post-filter (contact-only) data, not evidence that these sources used
   i_min=0.
 
-**Bottom line for Task 12 tiering:** treat the following 9 sources as having
-NO usable recovered i_min (same bucket as literal "ambiguous", go to
-tier-2/verbatim-wrap, do not guess a value): `tactile_tracking`, `sparsh`,
-`real_tactile_mnist`, `feelanyforce`, `threedcal`, `tacquad`,
-`sim_tactile_mnist`, `sim_starstruck`, `feats`. Only 4 sources produced a
-non-degenerate floor with p01 and p05 close together: `gelslam` (~11.1),
-`unit` (~19.1), `fota_labeled` (~10.8), `fota_unlabeled` (~11.2).
+**Corrected bottom line for Task 12 (superseding this file's original
+framing):** i_min is *not* unknown for the 9 "degenerate" or "ambiguous"
+sources above — `docs/imin_from_code.md` has a code-derived, file:line-cited
+value for every one of them except `feats` (which never used an intensity
+filter at all; it is gated on `f_z` force, by design, not something to
+recover here). Do not route sources to a "no known i_min" tier just because
+this empirical tool returned a degenerate or ambiguous reading — that
+reading is a limitation of reconstructing a baseline from contact-only data,
+not evidence the value is unknown. Task 12 should consume
+`docs/imin_from_code.md` as the source of truth; treat this file purely as
+corroborating (or, for `unit`, contradicting-and-investigated) evidence.
+
+Rows where this tool's reading is non-degenerate and corroborates the code
+value: `gelslam` (p01 11.05 / p05 11.46 vs. code 10), `fota_labeled` (10.78 /
+11.39 vs. 10), `fota_unlabeled` (11.20 / 11.86 vs. 10), and `sparsh` at p05
+only (12.50 vs. 12 — p01 is contaminated, see the anchor-check note above).
+
+Rows where this tool's reading is degenerate or contradicts the code value
+(all explained above and in `docs/imin_from_code.md`, all with a real
+code-derived value to use instead): `tactile_tracking` (code 10; tool
+"ambiguous"), `real_tactile_mnist` (code 15; tool degenerate-zero,
+one-row-per-capture), `feelanyforce` (code 10; tool degenerate-zero,
+baseline circularity), `threedcal` (code 10; tool degenerate-zero, baseline
+circularity), `tacquad` (code 12; tool degenerate-zero, baseline
+circularity), `sim_tactile_mnist` (code 15; tool degenerate-zero, baseline
+circularity), `sim_starstruck` (code 15; tool degenerate-zero, baseline
+circularity), `unit` (code 12; tool reads a non-degenerate but wrong ~19.1 —
+see the dedicated investigation in `docs/imin_from_code.md`), `feats` (no
+code i_min exists; tool degenerate-zero for the same one-row-per-capture
+reason as `real_tactile_mnist`, consistent with there being no real
+threshold to find).
