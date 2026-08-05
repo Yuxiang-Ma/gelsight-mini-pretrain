@@ -4,7 +4,7 @@ tier-2: WRAPPED VERBATIM, NOT MIGRATED.
 
 Why: two independent reasons. (1) Published with the 26-column legacy schema,
 which has no frame_idx column. (2) It went through the v9 channel-order fix
-(legacy/fix_channel_order.py), so its intermediate state is not reproducible
+(archive/fix_channel_order.py), so its intermediate state is not reproducible
 from the current raw data even if a join key existed.
 """
 from __future__ import annotations
@@ -25,10 +25,10 @@ SPEC = register(SourceSpec(
     notes=(
         "tier-2. 26-column schema (no frame_idx) AND post-v9 channel fix, so "
         "the intermediate state is unreproducible. Implementation: "
-        "legacy/redo_fota_unlabeled.py + legacy/fix_channel_order.py."
+        "archive/redo_fota_unlabeled.py + archive/fix_channel_order.py."
     ),
 ))
 
 
 def legacy_entrypoint() -> str:
-    return "legacy/redo_fota_unlabeled.py"
+    return "archive/redo_fota_unlabeled.py"

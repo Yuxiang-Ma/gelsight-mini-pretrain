@@ -22,10 +22,10 @@ SPEC = register(SourceSpec(
     resolution=(640, 480),
     notes=(
         "tier-2. Published with the 26-column schema (no frame_idx), so no "
-        "regression join key. Implementation: legacy/reprocess_fota.py."
+        "regression join key. Implementation: archive/reprocess_fota.py."
     ),
 ))
 
 
 def legacy_entrypoint() -> str:
-    return "legacy/reprocess_fota.py"
+    return "archive/reprocess_fota.py"
