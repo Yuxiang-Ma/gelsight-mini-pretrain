@@ -1,0 +1,13 @@
+{
+  "source": "threedcal",
+  "n_seen": 36270,
+  "n_kept": 6924,
+  "n_empty_dropped": 0,
+  "n_empty_passed": 0,
+  "n_dup_dropped": 29346,
+  "n_stride_dropped": 0,
+  "splits": {
+    "train": 6924
+  },
+  "wall_time_sec": 2736.855097055435
+}

@@ -1,0 +1,14 @@
+{
+  "source": "gelslam",
+  "n_seen": 295525,
+  "n_kept": 114019,
+  "n_empty_dropped": 56435,
+  "n_empty_passed": 1706,
+  "n_dup_dropped": 123521,
+  "n_stride_dropped": 0,
+  "splits": {
+    "train": 30779,
+    "recon": 83240
+  },
+  "wall_time_sec": 3572.059079885483
+}

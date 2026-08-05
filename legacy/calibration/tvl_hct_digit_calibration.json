@@ -1,0 +1,25 @@
+{
+  "source": "tvl_hct_digit",
+  "n_frames": 800,
+  "resolutions": {
+    "(480, 640, 3)": 800
+  },
+  "intensity_pct": {
+    "p05": 0.0,
+    "p50": 10.860654830932617,
+    "p95": 18.63243999481201,
+    "p99": 20.136707820892333
+  },
+  "area_pct": {
+    "p05": 0.0,
+    "p50": 1815.5,
+    "p95": 33295.74999999999
+  },
+  "background_diff": {
+    "bg_intensity_p95": 12.129920864105225,
+    "bg_intensity_p99": 12.848117694854736
+  },
+  "recommended_I_min": 15,
+  "fixed_A_min": 40,
+  "fixed_PIXEL_THRESH": 10
+}

@@ -1,0 +1,15 @@
+{
+  "source": "tacquad_mini",
+  "n_seen": 18057,
+  "n_kept": 4289,
+  "n_empty_dropped": 0,
+  "n_empty_passed": 0,
+  "n_dup_dropped": 13768,
+  "n_stride_dropped": 0,
+  "splits": {
+    "data_fine": 207,
+    "data_indoor": 2056,
+    "data_outdoor": 2026
+  },
+  "wall_time_sec": 1152.332946062088
+}

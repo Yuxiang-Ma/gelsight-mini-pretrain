@@ -1,0 +1,15 @@
+{
+  "source": "faf_force_estimation",
+  "n_seen": 80948,
+  "n_kept": 14648,
+  "n_empty_dropped": 0,
+  "n_empty_passed": 0,
+  "n_dup_dropped": 66300,
+  "n_stride_dropped": 0,
+  "splits": {
+    "sharp": 6384,
+    "sphere": 6672,
+    "flat": 1592
+  },
+  "wall_time_sec": 1067.8210372924805
+}

@@ -1,0 +1,14 @@
+{
+  "source": "real_tactile_mnist",
+  "n_seen": 264524,
+  "n_kept": 200000,
+  "n_empty_dropped": 0,
+  "n_empty_passed": 0,
+  "n_dup_dropped": 63285,
+  "n_stride_dropped": 1239,
+  "splits": {
+    "test": 37160,
+    "train": 162840
+  },
+  "wall_time_sec": 5406.915643930435
+}

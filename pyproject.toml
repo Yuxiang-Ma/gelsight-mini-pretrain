@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gsmp"
+version = "0.1.0"
+description = "Preprocessing pipeline for the gelsight-mini-pretrain dataset"
+requires-python = ">= 3.9"
+dependencies = [
+    "numpy",
+    "pyarrow",
+    "pillow",
+    "opencv-python",
+    "huggingface_hub",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

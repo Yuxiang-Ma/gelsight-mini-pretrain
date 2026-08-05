@@ -1,0 +1,13 @@
+{
+  "source": "tactile_tracking",
+  "n_seen": 7386,
+  "n_kept": 2408,
+  "n_empty_dropped": 866,
+  "n_empty_passed": 34,
+  "n_dup_dropped": 3272,
+  "n_stride_dropped": 0,
+  "splits": {
+    "train": 2408
+  },
+  "wall_time_sec": 101.50851321220398
+}

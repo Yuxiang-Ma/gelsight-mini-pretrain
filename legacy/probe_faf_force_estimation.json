@@ -1,0 +1,9 @@
+{
+  "n_probed_frames": 1170,
+  "n_probed_captures": 39,
+  "mean_dynamism": 0.8511317221070686,
+  "median_dynamism": 1.083263874053955,
+  "mean_deformation": 0.8975615680217743,
+  "empty_frac": 1.0,
+  "n_captures_with_3plus_frames": 39
+}

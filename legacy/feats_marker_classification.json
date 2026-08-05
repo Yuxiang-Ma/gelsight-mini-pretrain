@@ -1,0 +1,50 @@
+{
+  "test": {
+    "total": 1845,
+    "markered": 607,
+    "markerless": 1238,
+    "median_dots": 7,
+    "max_dots": 66,
+    "min_dots": 0
+  },
+  "test_diff_sensor_new_gel": {
+    "total": 395,
+    "markered": 0,
+    "markerless": 395,
+    "median_dots": 0,
+    "max_dots": 4,
+    "min_dots": 0
+  },
+  "test_diff_sensor_old_gel": {
+    "total": 393,
+    "markered": 32,
+    "markerless": 361,
+    "median_dots": 26,
+    "max_dots": 33,
+    "min_dots": 16
+  },
+  "test_unknown_indenters": {
+    "total": 2789,
+    "markered": 2450,
+    "markerless": 339,
+    "median_dots": 36,
+    "max_dots": 45,
+    "min_dots": 17
+  },
+  "train": {
+    "total": 15670,
+    "markered": 5565,
+    "markerless": 10105,
+    "median_dots": 8,
+    "max_dots": 64,
+    "min_dots": 0
+  },
+  "val": {
+    "total": 921,
+    "markered": 345,
+    "markerless": 576,
+    "median_dots": 10,
+    "max_dots": 63,
+    "min_dots": 0
+  }
+}
