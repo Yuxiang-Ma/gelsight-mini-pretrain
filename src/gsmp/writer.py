@@ -41,8 +41,16 @@ class ShardWriter:
         self._shard_idx = 0
         self._pending_bytes = 0
         self.total_rows = 0
+        self._closed = False
+        self._final_paths: List[Path] = []
 
     def add(self, row: Dict[str, Any]) -> None:
+        if self._closed:
+            raise RuntimeError(
+                "ShardWriter is closed: add() cannot be called after "
+                "close(). ShardWriter has a one-shot lifecycle — create a "
+                "new instance to write more rows."
+            )
         full = {name: row.get(name) for name in COLUMNS}
         self._rows.append(full)
         img = full.get("image")
@@ -69,7 +77,15 @@ class ShardWriter:
         self._pending_bytes = 0
 
     def close(self) -> List[Path]:
-        """Flush the tail and rename shards to `prefix-NNNNN-of-NNNNN`."""
+        """Flush the tail and rename shards to `prefix-NNNNN-of-NNNNN`.
+
+        One-shot: once closed, subsequent `close()` calls are a safe no-op
+        that return the same path list without touching disk again (this is
+        what makes it safe for `add()` after `close()` to raise instead of
+        silently reopening and clobbering already-renamed shards).
+        """
+        if self._closed:
+            return self._final_paths
         self._flush()
         staged = sorted(self.out_dir.glob(f"{self.prefix}-?????.parquet"))
         total = len(staged)
@@ -79,4 +95,6 @@ class ShardWriter:
             if src != dst:
                 src.rename(dst)
             final.append(dst)
+        self._closed = True
+        self._final_paths = final
         return final

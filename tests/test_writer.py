@@ -73,3 +73,51 @@ def test_empty_writer_produces_no_files(tmp_path):
     w = ShardWriter(tmp_path, "train")
     assert w.close() == []
     assert list(tmp_path.glob("*.parquet")) == []
+
+
+def test_add_after_close_raises(tmp_path):
+    w = ShardWriter(tmp_path, "train")
+    w.add(_row())
+    w.close()
+    try:
+        w.add(_row())
+        assert False, "expected add() after close() to raise"
+    except RuntimeError as e:
+        msg = str(e).lower()
+        assert "closed" in msg
+        assert "add" in msg
+
+
+def test_double_close_with_no_intervening_add_is_safe_noop(tmp_path):
+    w = ShardWriter(tmp_path, "train")
+    w.add(_row())
+    w.add(_row())
+    paths_first = w.close()
+    paths_second = w.close()
+    assert paths_second == paths_first
+    total_rows = sum(pq.read_table(p).num_rows for p in paths_second)
+    assert total_rows == 2
+
+
+def test_add_after_close_does_not_destroy_already_written_data(tmp_path):
+    # Regression test for the silent-overwrite bug: a second write session
+    # on the same ShardWriter used to recompute shard indices from scratch
+    # and clobber the first close()'s output. Now add() after close() must
+    # raise instead, and whatever data was written by the first close()
+    # must remain intact and readable.
+    w = ShardWriter(tmp_path, "train")
+    w.add(_row(source="rowA"))
+    paths = w.close()
+
+    try:
+        w.add(_row(source="rowB"))
+    except RuntimeError:
+        pass
+    else:
+        assert False, "expected add() after close() to raise"
+
+    # The originally written row must still be present on disk, unharmed.
+    sources = []
+    for p in paths:
+        sources.extend(pq.read_table(p).column("source").to_pylist())
+    assert sources == ["rowA"]
