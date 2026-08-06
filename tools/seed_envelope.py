@@ -81,14 +81,23 @@ def main() -> int:
     importlib.import_module(f"gsmp.sources.{args.source}")
     s = spec.get(args.source)
     published = published_keys(args.source, s.license_repo)
-    env = determinism.evaluate_envelope(args.source, runs, published)
+    env = determinism.evaluate_envelope(
+        args.source, runs, published,
+        restrict_to_covered_captures=bool(args.limit),
+    )
 
     print()
     print(f"  own run-to-run symdiffs : {env.self_symdiffs}")
     print(f"  gap to published        : {env.published_symdiff}")
     print(f"  produced (mean)         : {env.mean_produced:.0f}   "
           f"published: {env.n_published}")
+    if args.limit:
+        print(f"  capture coverage        : {env.capture_coverage:.1%} "
+              f"(--limit was used; published scoped to visited captures)")
     print(f"\n  {env.verdict}")
+    if args.limit and env.capture_coverage < 1.0:
+        print(f"  NOTE: this is a PARTIAL check over {env.capture_coverage:.1%} "
+              f"of published captures, not a whole-source verdict.")
     return 0 if env.consistent else 2
 
 

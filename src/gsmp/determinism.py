@@ -73,12 +73,14 @@ class SeedEnvelope:
     mean_produced: float
     consistent: bool
     verdict: str
+    capture_coverage: float
 
 
 def evaluate_envelope(
     source: str,
     run_key_sets: Sequence[Set[Key]],
     published: Set[Key],
+    restrict_to_covered_captures: bool = False,
 ) -> SeedEnvelope:
     """Compare our run-to-run spread against our gap to the published set.
 
@@ -86,26 +88,55 @@ def evaluate_envelope(
     each under a different process hash seed. If the published set is no
     further from our runs than they are from each other, the difference is
     attributable to the unrecoverable seed rather than to a porting error.
+
+    `restrict_to_covered_captures` scopes `published` to the captures the runs
+    actually visited. This is REQUIRED when the runs were produced with a
+    `--limit`, because otherwise every unvisited capture counts as a missing
+    key and the verdict is meaningless. It is also dangerous: scoping hides a
+    port that drops whole captures, so `capture_coverage` is reported
+    alongside and must be read with the verdict.
     """
     runs = [set(r) for r in run_key_sets]
     if len(runs) < 2:
         raise ValueError("need at least 2 runs to measure a seed envelope")
+
+    published_captures = {c for c, _ in published}
+    covered = {c for r in runs for c, _ in r}
+    coverage = (
+        len(covered & published_captures) / len(published_captures)
+        if published_captures else 1.0
+    )
+    if restrict_to_covered_captures:
+        published = {(c, i) for c, i in published if c in covered}
 
     self_symdiffs = [len(a ^ b) for a, b in itertools.combinations(runs, 2)]
     published_symdiff = min(len(r ^ published) for r in runs)
     mean_produced = sum(len(r) for r in runs) / len(runs)
     ceiling = max(self_symdiffs)
 
+    floor = min(self_symdiffs)
     consistent = published_symdiff <= ceiling
-    if consistent:
+
+    # "<= max" alone is a weak bar: with a wide self-spread almost anything
+    # clears it. Report WHERE the gap falls in that spread, so a marginal
+    # result cannot be read as a strong one.
+    if published_symdiff < floor:
         verdict = (
-            f"consistent with seed uncertainty: gap to release "
-            f"{published_symdiff} <= own run-to-run spread {ceiling}"
+            f"strong -- gap to release {published_symdiff} is below our own "
+            f"minimum run-to-run spread {floor}: the port is closer to the "
+            f"release than two of its own runs are to each other "
+            f"(spread {floor}-{ceiling})"
+        )
+    elif consistent:
+        verdict = (
+            f"consistent with seed uncertainty -- gap to release "
+            f"{published_symdiff} lies inside our own run-to-run spread "
+            f"{floor}-{ceiling}; note a wide spread makes this a weak bar"
         )
     else:
         verdict = (
-            f"gap to release {published_symdiff} exceeds own run-to-run "
-            f"spread {ceiling} -- a real difference beyond the seed"
+            f"gap to release {published_symdiff} exceeds our own run-to-run "
+            f"spread {floor}-{ceiling} -- a real difference beyond the seed"
         )
 
     return SeedEnvelope(
@@ -117,4 +148,5 @@ def evaluate_envelope(
         mean_produced=mean_produced,
         consistent=consistent,
         verdict=verdict,
+        capture_coverage=coverage,
     )
