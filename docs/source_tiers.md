@@ -63,3 +63,49 @@ because there is no way to prove the refactor preserved it.
   published bytes reflect a one-shot in-place channel swap applied after
   the original ingest, and that intermediate state is not reproducible from
   the current raw data.
+
+---
+
+## Correction (2026-08-06): tier-1 is not one tier
+
+The criterion above — "published rows carry a usable `(capture, frame_idx)`
+join key" — was checked with `has_join_key()`, which tested only that the
+columns exist and are non-null. **It never tested that the key is unique.**
+
+`tools/regress.py` compares SETS of keys. Where the key is not unique, set
+equality does not establish row-level equality: two rows sharing a key are
+indistinguishable to a set comparison. `sim_starstruck` has 166,104 published
+rows over 31,096 distinct keys, so matching that key set is equally consistent
+with emitting either count.
+
+Three of the ten tier-1 sources are affected, so tier-1 is now split:
+
+- **tier-1a** — key is unique; set equality IS row-level parity.
+- **tier-1b** — key is not unique; a passing regression establishes key-set
+  equality, plus row-count equality where separately measured. A compensating
+  multiset difference would still pass. Strictly weaker, and must be reported
+  as such rather than as an unqualified "PASS exact".
+- **tier-2** — no usable key; moved verbatim, no proof attempted.
+
+Closing tier-1b fully would require `runner.run()` to track key multiplicity;
+it currently accumulates a `set`, so multiplicity is discarded inside the
+runner itself.
+
+Measured against the release on 2026-08-06 by `gsmp.schema.join_key_quality()`
+and pinned by `tests/test_join_key_quality.py`.
+
+| source | repo | rows | distinct keys | colliding keys | key unique | strongest possible claim |
+|---|---|---:|---:|---:|---|---|
+| `gelslam` | main | 114019 | 114019 | — | yes | **tier-1a** — row-level parity |
+| `tactile_tracking` | main | 2408 | 2408 | — | yes | **tier-1a** — row-level parity |
+| `real_tactile_mnist` | main | 30956 | 30956 | — | yes | **tier-1a** — row-level parity |
+| `feelanyforce` | main | 48197 | 48197 | — | yes | **tier-1a** — row-level parity |
+| `threedcal` | main | 6924 | 6924 | — | yes | **tier-1a** — row-level parity |
+| `unit` | main | 387 | 387 | — | yes | **tier-1a** — row-level parity |
+| `sparsh` | nc | 66444 | 66444 | — | yes | **tier-1a** — row-level parity |
+| `tacquad` | main | 12195 | 11887 | 308 | **no** | **tier-1b** — key-set + row-count only |
+| `sim_tactile_mnist` | main | 150601 | 87913 | 30481 | **no** | **tier-1b** — key-set + row-count only |
+| `sim_starstruck` | main | 166104 | 31096 | 28941 | **no** | **tier-1b** — key-set + row-count only |
+| `feats` | main | 16969 | — | — | — | **tier-2** — no usable key; moved verbatim, no proof attempted |
+| `fota_labeled` | main | 26394 | — | — | — | **tier-2** — no usable key; moved verbatim, no proof attempted |
+| `fota_unlabeled` | main | 66761 | — | — | — | **tier-2** — no usable key; moved verbatim, no proof attempted |
