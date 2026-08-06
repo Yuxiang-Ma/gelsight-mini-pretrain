@@ -4,9 +4,10 @@ This module is the single source of truth for the column set. The legacy
 `make_parquet_v2.SCHEMA` and the `sys.path` hack in `legacy/pipeline.py`
 that imported it are both replaced by this.
 
-Known deviation: fota_labeled and fota_unlabeled were published with 26
-columns (see LEGACY_26_SOURCES). Verified 2026-08-04 against the released
-parquet. tests/test_schema.py pins this.
+All 13 published configs share this 30-column schema. fota_labeled and
+fota_unlabeled shipped with 26 until 2026-08-06; they were widened and
+republished, and LEGACY_26_SOURCES is now empty. LEGACY_26_MISSING is kept
+because gsmp.backfill still needs to know which columns were absent.
 """
 from __future__ import annotations
 
@@ -55,7 +56,14 @@ SCHEMA = pa.schema([
 COLUMNS = tuple(f.name for f in SCHEMA)
 
 #: Sources published with the older 26-column schema.
-LEGACY_26_SOURCES = frozenset({"fota_labeled", "fota_unlabeled"})
+#:
+#: Empty since 2026-08-06: fota_labeled and fota_unlabeled were widened to the
+#: full 30 columns and republished, so every config now shares one schema and
+#: cross-config concatenate_datasets works (verified by actually running the
+#: dataset README's quick-start, not by inspecting column lists). The three
+#: columns that were never recorded for these subsets -- frame_idx, episode,
+#: digit_class -- are present but null.
+LEGACY_26_SOURCES = frozenset()
 
 #: Columns absent from the 26-column sources.
 LEGACY_26_MISSING = frozenset({

@@ -72,9 +72,20 @@ def test_has_join_key_only_reports_presence():
     assert schema.join_key_quality("sim_starstruck").unique is False
 
 
-@pytest.mark.parametrize("source", sorted(schema.LEGACY_26_SOURCES))
-def test_legacy_26_sources_have_no_join_key(source):
+@pytest.mark.parametrize("source", ["fota_labeled", "fota_unlabeled"])
+def test_fota_has_the_columns_but_still_no_usable_key(source):
+    """Widening the schema did NOT make these regression-testable.
+
+    The 2026-08-06 backfill gave both configs all 30 columns, so
+    `frame_idx` now EXISTS -- but it is null for every row, because the value
+    was never recorded upstream and is not recoverable. A present-but-null key
+    identifies nothing, so these two stay tier-2: moved verbatim, no parity
+    proof attempted. This test exists because "the column is there now" is
+    exactly the kind of surface change that could be mistaken for a promotion.
+    """
     _skip_if_absent(source, "main")
+    assert "frame_idx" in schema.published_columns(source)
     q = schema.join_key_quality(source, "main")
     assert not q.present
+    assert q.n_rows > 0                     # rows are counted even without a key
     assert q.proof_strength.startswith("none")
