@@ -16,7 +16,7 @@ constant wins (noted explicitly).
 |---|---|---|---|
 | `gelslam` | 10 | `legacy/make_parquet_v2.py:53` | `"gelslam":           dict(A_min=40, I_min=10),` |
 | `tactile_tracking` | 10 | `legacy/make_parquet_v2.py:54` | `"tactile_tracking":  dict(A_min=40, I_min=10),` |
-| `real_tactile_mnist` | 15 | `legacy/make_parquet_v2.py:231` | `I_MIN = 15           # RTM uses stricter I (digit imprints are inherently subtle)` |
+| `real_tactile_mnist` | 12 | `legacy/extract_rtm_video.py:56` | `I_MIN = 12` — see "real_tactile_mnist conflict" below; `make_parquet_v2.py:231` (`I_MIN=15`) and `parallel_rtm.py:26` (`I_MIN=15`) are both superseded paths that did NOT produce the release |
 | `feelanyforce` | 10 | `legacy/make_parquet_v2.py:319` | `A_MIN, I_MIN = 40, 10` |
 | `sim_tactile_mnist` | 15 | `legacy/make_parquet_v2.py:379` | `I_MIN = 15           # stricter I to match RTM (sim imprints also vary in strength)` (shared body, called from `iter_sim_tactile_mnist` at :433) |
 | `sim_starstruck` | 15 | `legacy/make_parquet_v2.py:379` | same shared body (`_iter_sim_parquet_filtered`), called from `iter_sim_starstruck` at :447 |
@@ -47,6 +47,19 @@ produced published data; it reads as an earlier attempt at ingesting the
 Sparsh raw data, superseded by `ingest_sparsh.py` before publication. It is
 listed here only so a future reader who greps `I_MIN` in `make_parquet_v2.py`
 does not mistake it for a live source.
+
+`make_parquet_v2.py:207-307` defines `iter_real_tactile_mnist()`
+(`I_MIN=15`, `random.Random(42)`, per-frame K=0.30 Bernoulli sampling inside
+a "touch window", `capture=f"r{round_id}_t{tj}"`), registered in
+`SOURCE_ITERS` as `"real_tactile_mnist"` — the entry this table originally
+(wrongly) trusted as authoritative. `legacy/parallel_rtm.py`
+(`process_one_row`, `I_MIN=15`, same `f"r{round_id}_t{tj}"` capture format,
+same K=0.30 Bernoulli shape, just parallelised by row) is the same
+algorithm restated for a multiprocessing pool. **Neither produced the
+published `real_tactile_mnist`** — see "real_tactile_mnist conflict" below
+for the full evidence. Both are listed here so a future reader who greps
+`I_MIN` in `make_parquet_v2.py` or `parallel_rtm.py` does not mistake
+either for the live source.
 
 ## Conflict: `unit` — code says 12, empirical recovery says ~19.1
 
@@ -148,6 +161,80 @@ docstring alone:
 `tacquad` config. `iter_tacquad_mini()` (`I_MIN = 10`) is dead code,
 superseded before publication and never reached the released files.**
 `I_MIN = 12` is recorded as authoritative for `tacquad` in the table above.
+
+## Conflict: `real_tactile_mnist` — three legacy code paths, only one published
+
+Three different scripts define an RTM ingester with different `I_MIN` and
+different frame-selection shapes:
+
+- `iter_real_tactile_mnist()` in `legacy/make_parquet_v2.py:207-307`,
+  `I_MIN=15` (line 231), `random.Random(42)` seed, per-frame K=0.30
+  Bernoulli sampling inside a "touch window" (can keep 0, 1, 2, 3+ frames
+  per touch), `capture=f"r{round_id}_t{tj}"` (line 299) — registered in
+  `SOURCE_ITERS`, and the entry this table originally cited as
+  authoritative.
+- `legacy/parallel_rtm.py` (`process_one_row`), `I_MIN=15` (line 26), same
+  K=0.30 Bernoulli shape and same `capture=f"r{round_id}_t{tj}"` format
+  (line 124) — a multiprocessing restatement of the same algorithm, split
+  by parquet row instead of by whole file.
+- `legacy/extract_rtm_video.py` — docstring: "Re-extract real_tactile_mnist
+  from the VIDEO upstream (vs the prior single-frame extract)" — `I_MIN=12`
+  (line 56), `A_MIN=40`, `K_PER_TOUCH=1` (line 58, "peak frame per touch"):
+  decodes every frame of a touch, scores each one (`score = intensity if
+  area >= A_MIN else 0.0`, baseline = median of `grey_center` over **every**
+  frame of that touch's clip, not a first-N prologue), keeps only the
+  single highest-scoring frame if it clears `I_MIN`, else falls back to a
+  `BG_RATE=0.015` Bernoulli keep-one-random-frame draw.
+  `capture=f"{id_}_t{touch_idx}"` (line 22/164, no `"r"` prefix).
+
+I confirmed which one produced the release against the actual published
+parquet, not by trusting any docstring:
+
+```
+group real_tactile_mnist's 30,956 published rows (25,829 train + 5,127
+test) by `capture`  ->  every group has size exactly 1 (histogram {1: 30956})
+```
+
+- A K=0.30 per-frame Bernoulli draw over a ~6-90-frame touch window
+  (`iter_real_tactile_mnist` / `parallel_rtm.py`, both `I_MIN=15`) would
+  routinely keep 0, 1, 2, 3+ frames from the same touch. A hard, universal
+  cap of exactly one row per capture is impossible under that shape and is
+  instead the exact fingerprint of `extract_rtm_video.py`'s
+  `K_PER_TOUCH=1` deterministic peak-frame selection.
+- Published `capture` strings never carry the `"r"` prefix
+  `iter_real_tactile_mnist`/`parallel_rtm.py` both write
+  (`f"r{round_id}_t{tj}"`) — grepping the published `capture` column for a
+  leading `"r"` across all 30,956 rows returns zero matches. Every
+  published capture instead matches `extract_rtm_video.py`'s
+  `f"{id_}_t{touch_idx}"` format exactly (e.g.
+  `"2023-09-28_15-50-43_7-0_t4"`).
+- I went further than the capture-format/row-count fingerprint and
+  re-ran `extract_rtm_video.py`'s actual score-and-argmax procedure
+  against the raw upstream touch videos
+  (`/media/yxma/Disk1/yuxiang/mini_data/markerless/RealTactileMNIST/data/*.parquet`)
+  for a 654-touch sample (10 rounds of the test split) and compared the
+  predicted winning `frame_idx` to the published one: at `I_MIN=12` with
+  baseline = median-of-all-frames-in-touch, 626/626 (100%) exact agreement
+  on every touch where some frame actually clears the `area >= A_MIN`
+  gate; the remaining 28 touches in that sample all had **zero** frames
+  with `area >= 40` at all (max score 0.00 across the whole clip), so they
+  can only have been kept by `extract_rtm_video.py`'s `BG_RATE` fallback
+  draw, never by the deterministic path. At `I_MIN=15` (this table's
+  previous value) the match rate collapses to 61/654 — most winning
+  frames' true intensity sits in `[12, 15)`.
+
+**Conclusion: `extract_rtm_video.py` (`I_MIN=12`, `K_PER_TOUCH=1`) produced
+the published `real_tactile_mnist`. `iter_real_tactile_mnist()` and
+`parallel_rtm.py` (both `I_MIN=15`, per-frame Bernoulli) are dead code for
+this source, superseded before publication and never reached the released
+files**, despite `iter_real_tactile_mnist` being registered in
+`SOURCE_ITERS` — the same "`SOURCE_ITERS` as source→producer map" trap
+already documented for `tacquad` above, just not previously caught for this
+source. `I_MIN = 12` is recorded as authoritative for `real_tactile_mnist`
+in the table above. (`extract_rtm_video.py`'s background-keep rng,
+`random.Random(hash(shard_filename) & 0xFFFFFFFF)`, has the same
+unrecoverable-`PYTHONHASHSEED` problem already documented for `sparsh` and
+`tacquad`; that affects regression tolerance, not this `I_MIN` recovery.)
 
 ## Corroboration against Task 10's empirical numbers
 
