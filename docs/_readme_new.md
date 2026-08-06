@@ -153,6 +153,10 @@ pool = concatenate_datasets([
 
 For per-subset details (paper, license, processing recipe, sample grids, stats), see **[SOURCES.md](SOURCES.md)**.
 
+Full build pipeline — per-source parameters cited to `file:line`, and the
+regression harness that checks each source against this release:
+<https://github.com/Yuxiang-Ma/gelsight-mini-pretrain>
+
 ## Sample images
 
 | | |
@@ -191,6 +195,15 @@ Please cite both this aggregation **and** the upstream sources you use:
 ## Investigated but not included
 
 Touch-and-Go, TVL (Touch-Vision-Language), facebook/gelsight-force-estimation, YCB-Sight, TACTO/MidasTouch/DiffTactile — see [SOURCES.md](SOURCES.md#investigated-but-not-included) for reasons (wrong sensor, license, or not Mini-calibrated).
+
+## Changelog
+
+- **2026-08-06** — `fota_labeled` and `fota_unlabeled` were widened from 26 to
+  30 columns, so every config now shares one schema and the cross-config
+  `concatenate_datasets` example above works. `frame_idx`, `episode` and
+  `digit_class` are null for these two subsets: they were never recorded at
+  build time and are not recoverable. Image bytes were not re-encoded — every
+  original column passes through byte-identical.
 
 ## License
 
