@@ -18,6 +18,7 @@ Read-only: touches only the published parquet and the raw tree.
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import pathlib
@@ -74,6 +75,10 @@ def main() -> int:
               f"kept {len(keys)} of {n_seen} seen")
         runs.append(keys)
 
+    # The worker subprocesses import the source module (which registers its
+    # SPEC); the parent has not, so its registry is empty. Import here before
+    # spec.get(), or this fails with KeyError after all the expensive runs.
+    importlib.import_module(f"gsmp.sources.{args.source}")
     s = spec.get(args.source)
     published = published_keys(args.source, s.license_repo)
     env = determinism.evaluate_envelope(args.source, runs, published)

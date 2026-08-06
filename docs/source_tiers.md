@@ -109,3 +109,48 @@ and pinned by `tests/test_join_key_quality.py`.
 | `feats` | main | 16969 | — | — | — | **tier-2** — no usable key; moved verbatim, no proof attempted |
 | `fota_labeled` | main | 26394 | — | — | — | **tier-2** — no usable key; moved verbatim, no proof attempted |
 | `fota_unlabeled` | main | 66761 | — | — | — | **tier-2** — no usable key; moved verbatim, no proof attempted |
+
+---
+
+## Correction 2 (2026-08-06): producer determinism is a third axis
+
+Tier assignment modelled two questions — does a join key exist, and is it
+unique — and silently assumed a third: that the original producer is
+reproducible. Three producers are not:
+
+| source | seeded at | seeds from |
+|---|---|---|
+| `sparsh` | `legacy/ingest_sparsh.py:78` | `hash(indenter)` |
+| `tacquad` | `legacy/ingest_tacquad_full.py:88` | `hash(domain)` |
+| `real_tactile_mnist` | `legacy/extract_rtm_video.py:123` | `hash(fname)` |
+
+CPython randomises `hash(str)` per process. With `PYTHONHASHSEED` unset,
+`hash('flat')` measured 3873258486, 1233441081 and 1360980178 in three
+successive processes. The seed that produced the release was never logged, so
+**exact parity is impossible in principle** — re-running the original script
+would not reproduce it either.
+
+These are exactly the three sources whose regressions failed or never
+finished. Every other producer uses a literal integer seed, and five of those
+matched exactly. The correlation is 3/3 against 5/5, so the failures were an
+artifact of the grading scheme, not of the ports.
+
+The rng drives both the baseline sample and the background-keep draw, and the
+baseline is a per-pixel median *image* — so its sample composition decides
+which part of a heterogeneous source it resembles. Measured on `sparsh/sharp`
+(35,356 frames) under three baseline seeds, the per-batch pass rate swings
+between 0.29 and 0.47 and the batch-1-vs-batch-2 relationship flips. That is
+enough to make seed noise look like a systematic defect in an aggregate.
+
+**tier-1u** — unreproducible producer. Verified with `tools/seed_envelope.py`,
+which runs the port under several process hash seeds and asks whether the
+release sits inside the port's own run-to-run spread. A pass means
+"consistent with seed uncertainty", never "exact".
+
+Grading is therefore three independent questions:
+
+| question | checked by |
+|---|---|
+| does a join key exist? | `gsmp.schema.join_key_quality().present` |
+| is it unique? | `gsmp.schema.join_key_quality().unique` |
+| is the producer reproducible? | `gsmp.determinism.producer_is_reproducible()` |
