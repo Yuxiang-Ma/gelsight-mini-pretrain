@@ -36,8 +36,8 @@ because there is no way to prove the refactor preserved it.
 | sim_tactile_mnist | main | 30 | yes | 15 | tier-1 |
 | sim_starstruck | main | 30 | yes | 15 | tier-1 |
 | feats | main | 30 | NO | N/A (force-gated) | tier-2 |
-| fota_labeled | main | 26 | NO | 10 | tier-2 |
-| fota_unlabeled | main | 26 | NO | 10 | tier-2 |
+| fota_labeled | main | 30 | NO | 10 | tier-2 |
+| fota_unlabeled | main | 30 | NO | 10 | tier-2 |
 | sparsh | nc | 30 | yes | 12 | tier-1 |
 
 10 sources tier-1, 3 sources tier-2.
@@ -50,7 +50,7 @@ because there is no way to prove the refactor preserved it.
   `legacy/reprocess_feats.py:18,113`), not on pixel/contact intensity, so
   there was never a pixel-domain `frame_idx` to carry through in the first
   place. It has no `i_min` to recover, by design.
-- `fota_labeled` — published with the older 26-column schema
+- `fota_labeled` — was published with the older 26-column schema
   (`gsmp.schema.LEGACY_26_SOURCES`), which has no `frame_idx` column at
   all. There is no column to test for a join key against.
 - `fota_unlabeled` — same 26-column schema defect as `fota_labeled`, so no
@@ -154,3 +154,24 @@ Grading is therefore three independent questions:
 | does a join key exist? | `gsmp.schema.join_key_quality().present` |
 | is it unique? | `gsmp.schema.join_key_quality().unique` |
 | is the producer reproducible? | `gsmp.determinism.producer_is_reproducible()` |
+
+
+---
+
+## Correction 3 (2026-08-06): FoTA is now 30 columns and STILL tier-2
+
+The 26-column defect was fixed: both FoTA configs were widened and
+republished, so all 12 main-repo configs share one schema and the dataset
+README's `concatenate_datasets` example runs (verified end-to-end: 66,761 +
+30,779 -> 97,540 rows, identical features).
+
+**This did not promote them.** `frame_idx` now exists but is null in every
+row -- the value was never recorded upstream and is not recoverable -- so it
+identifies nothing and there is still no join key. Both remain tier-2: moved
+verbatim, no parity proof attempted.
+
+The column-count column in the table above therefore reads 30 while the tier
+stays tier-2. That combination is the point: a schema change is a surface
+change, and "the column is there now" is exactly what could be mistaken for a
+promotion. `tests/test_join_key_quality.py::test_fota_has_the_columns_but_
+still_no_usable_key` pins it.
